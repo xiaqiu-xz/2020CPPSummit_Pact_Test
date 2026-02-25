@@ -18,10 +18,23 @@ jobs:
 
       - run: mkdir -p consumer/build
 
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: ${{ runner.os }}-conan2-${{ hashFiles('consumer/conanfile.*') }}
+          restore-keys: ${{ runner.os }}-conan2-
+
       - name: Install conan
         run: |
           pip3 install wheel setuptools
           pip3 install conan
+
+      - name: Install Rust (for pact_ffi source build)
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source "$HOME/.cargo/env"
+          rustc --version
 
       - name: Check conan version
         run: |
@@ -33,9 +46,8 @@ jobs:
           rm -rf $HOME/.conan2/data/pact_ffi || true
           export PATH=$PATH:/home/runner/.local/bin
           conan profile detect --force
-          conan remote add pact-foundation https://pactfoundation.jfrog.io/artifactory/api/conan/pactfoundation-conan --force
-          conan install ../conanfile.txt --build=missing \
-            --settings compiler.cppstd=17 
+          # 不再添加失效的 pact-foundation remote
+          conan install .. --build=missing --build=pact_ffi --settings compiler.cppstd=17
         working-directory: consumer/build
         env:
           CC: gcc-14
@@ -68,18 +80,29 @@ jobs:
       - run: mkdir consumer\build
         shell: bash
 
-      - run: rm -rf $HOME/.conan2/data/pact_ffi || true
-        shell: bash
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ~\.conan2
+          key: ${{ runner.os }}-conan2-${{ hashFiles('consumer/conanfile.*') }}
+          restore-keys: ${{ runner.os }}-conan2-
 
       - name: Install conan
         run: |
           pip3 install wheel setuptools
           pip3 install conan
 
+      - name: Install Rust (for pact_ffi source build)
+        run: |
+          curl -sSf -o rustup-init.exe https://win.rustup.rs/x86_64
+          rustup-init.exe -y --default-toolchain stable --profile minimal
+          echo "$HOME\.cargo\bin" >> $GITHUB_PATH
+          rustc --version
+        shell: bash
+
       - name: conan install dependencies Windows
         run: |
-          conan remote add pact-foundation https://pactfoundation.jfrog.io/artifactory/api/conan/pactfoundation-conan --force
-          conan install ../conanfile.txt --build=missing --settings compiler.cppstd=17
+          conan install .. --build=missing --build=pact_ffi --settings compiler.cppstd=17
         working-directory: consumer/build
         shell: bash
 
@@ -107,10 +130,23 @@ jobs:
 
       - run: mkdir -p consumer/build
 
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: ${{ runner.os }}-conan2-${{ hashFiles('consumer/conanfile.*') }}
+          restore-keys: ${{ runner.os }}-conan2-
+
       - name: Install conan
         run: |
           pip3 install wheel setuptools
           pip3 install conan
+
+      - name: Install Rust (for pact_ffi source build)
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source "$HOME/.cargo/env"
+          rustc --version
 
       - name: Check conan version
         run: |
@@ -122,8 +158,7 @@ jobs:
           rm -rf $HOME/.conan2/data/pact_ffi || true
           export PATH=$PATH:/Users/runner/.local/bin
           conan profile detect --force
-          conan remote add pact-foundation https://pactfoundation.jfrog.io/artifactory/api/conan/pactfoundation-conan --force
-          conan install ../conanfile.txt --build=missing --settings compiler.cppstd=17 
+          conan install .. --build=missing --build=pact_ffi --settings compiler.cppstd=17
         working-directory: consumer/build
 
       - name: Build library
