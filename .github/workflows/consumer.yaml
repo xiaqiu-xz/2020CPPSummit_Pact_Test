@@ -107,6 +107,9 @@ jobs:
           cmake .. \
             -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake
           cmake --build . --config Release
+          # Windows 需要把 dll 拷贝到 exe 旁边
+          cp pact_ffi/pact_ffi.dll test/bin/ 2>/dev/null || true
+
 
       - name: Run tests
         working-directory: consumer/build

@@ -5,11 +5,82 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# 在根级统一 find_package，子目录继承
 find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(cpprestsdk REQUIRED)
 
+# ════════════════════════════════════════════════════════
+# ① 先下载 pact_ffi（必须在 add_subdirectory 之前！）
+# ════════════════════════════════════════════════════════
+set(PACT_FFI_VERSION "0.4.22")
+set(PACT_FFI_DIR "${CMAKE_BINARY_DIR}/pact_ffi")
+file(MAKE_DIRECTORY "${PACT_FFI_DIR}")
+
+if(WIN32)
+    set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/pact_ffi.dll")
+    set(PACT_FFI_URL "https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v${PACT_FFI_VERSION}/pact_ffi-windows-x86_64.dll.gz")
+elseif(APPLE)
+    set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/libpact_ffi.dylib")
+    # 注意：Apple Silicon 用 aarch64，x86_64 Runner 用下面这个
+    set(PACT_FFI_URL "https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v${PACT_FFI_VERSION}/libpact_ffi-macos-x86_64.dylib.gz")
+else()
+    set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/libpact_ffi.so")
+    set(PACT_FFI_URL "https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v${PACT_FFI_VERSION}/libpact_ffi-linux-x86_64.so.gz")
+endif()
+
+# 下载并解压库文件
+if(NOT EXISTS "${PACT_FFI_LIB_FILE}")
+    set(PACT_FFI_GZ "${PACT_FFI_DIR}/pact_ffi_download.gz")
+    message(STATUS "Downloading libpact_ffi v${PACT_FFI_VERSION}...")
+    file(DOWNLOAD "${PACT_FFI_URL}" "${PACT_FFI_GZ}" SHOW_PROGRESS STATUS DL_STATUS)
+    list(GET DL_STATUS 0 DL_CODE)
+    if(NOT DL_CODE EQUAL 0)
+        message(FATAL_ERROR "下载 pact_ffi 失败: ${DL_STATUS}")
+    endif()
+    find_program(GUNZIP gunzip REQUIRED)
+    execute_process(
+        COMMAND ${GUNZIP} -f "${PACT_FFI_GZ}"
+        RESULT_VARIABLE GZ_RESULT
+    )
+    if(NOT GZ_RESULT EQUAL 0)
+        message(FATAL_ERROR "解压 pact_ffi 失败")
+    endif()
+    # 解压后文件名含平台后缀，统一重命名
+    file(GLOB PACT_FFI_EXTRACTED
+        "${PACT_FFI_DIR}/libpact_ffi-*"
+        "${PACT_FFI_DIR}/pact_ffi-*"
+    )
+    foreach(f ${PACT_FFI_EXTRACTED})
+        file(RENAME "${f}" "${PACT_FFI_LIB_FILE}")
+    endforeach()
+    message(STATUS "libpact_ffi 就绪: ${PACT_FFI_LIB_FILE}")
+endif()
+
+# 下载 pact.h 头文件
+set(PACT_H "${PACT_FFI_DIR}/pact.h")
+if(NOT EXISTS "${PACT_H}")
+    message(STATUS "Downloading pact.h...")
+    file(DOWNLOAD
+        "https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v${PACT_FFI_VERSION}/pact.h"
+        "${PACT_H}"
+        STATUS DL_STATUS
+    )
+    list(GET DL_STATUS 0 DL_CODE)
+    if(NOT DL_CODE EQUAL 0)
+        message(FATAL_ERROR "下载 pact.h 失败: ${DL_STATUS}")
+    endif()
+endif()
+
+# 创建 imported target
+add_library(pact_ffi SHARED IMPORTED GLOBAL)
+set_target_properties(pact_ffi PROPERTIES
+    IMPORTED_LOCATION             "${PACT_FFI_LIB_FILE}"
+    INTERFACE_INCLUDE_DIRECTORIES "${PACT_FFI_DIR}"
+)
+
+# ════════════════════════════════════════════════════════
+# ② 再编译子目录（此时 pact_ffi target 和 pact.h 已就绪）
+# ════════════════════════════════════════════════════════
 add_subdirectory(src)
 
 install(TARGETS pact-cpp-consumer DESTINATION lib)
