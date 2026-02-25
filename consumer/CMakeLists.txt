@@ -9,9 +9,25 @@ find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(cpprestsdk REQUIRED)
 
+
+# ════════════════════════════════════════════════════════
+# pact_ffi — 由 CI workflow 提前下载，这里只创建 imported target
+# ════════════════════════════════════════════════════════
+set(PACT_FFI_DIR "${CMAKE_BINARY_DIR}/pact_ffi")
+
+if(WIN32)
+    set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/pact_ffi.dll")
+elseif(APPLE)
+    set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/libpact_ffi.dylib")
+else()
+    set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/libpact_ffi.so")
+endif()
+
+
 # ════════════════════════════════════════════════════════
 # ① 先下载 pact_ffi（必须在 add_subdirectory 之前！）
 # ════════════════════════════════════════════════════════
+# 如果本构建下面的部分要打开
 # set(PACT_FFI_VERSION "0.4.22")
 # set(PACT_FFI_DIR "${CMAKE_BINARY_DIR}/pact_ffi")
 # file(MAKE_DIRECTORY "${PACT_FFI_DIR}")
@@ -31,7 +47,7 @@ find_package(cpprestsdk REQUIRED)
 # # 下载并解压库文件
 # if(NOT EXISTS "${PACT_FFI_LIB_FILE}")
 #     set(PACT_FFI_GZ "${PACT_FFI_DIR}/pact_ffi_download.gz")
-#     message(STATUS "Downloading libpact_ffi v${PACT_FFI_VERSION}...")
+#     message(STATUS "Downloading libpact_ffi v${PACT_FFI_VERSION} from ${PACT_FFI_URL}... ")
 #     file(DOWNLOAD "${PACT_FFI_URL}" "${PACT_FFI_GZ}" SHOW_PROGRESS STATUS DL_STATUS)
 #     list(GET DL_STATUS 0 DL_CODE)
 #     if(NOT DL_CODE EQUAL 0)
@@ -90,7 +106,7 @@ find_package(cpprestsdk REQUIRED)
 
 #     message(STATUS "libpact_ffi 就绪: ${PACT_FFI_LIB_FILE}")
 # endif()
-# 下载 pact.h 头文件
+# # 下载 pact.h 头文件
 # set(PACT_H "${PACT_FFI_DIR}/pact.h")
 # if(NOT EXISTS "${PACT_H}")
 #     message(STATUS "Downloading pact.h...")
@@ -105,19 +121,6 @@ find_package(cpprestsdk REQUIRED)
 #     endif()
 # endif()
 
-
-# ════════════════════════════════════════════════════════
-# pact_ffi — 由 CI workflow 提前下载，这里只创建 imported target
-# ════════════════════════════════════════════════════════
-set(PACT_FFI_DIR "${CMAKE_BINARY_DIR}/pact_ffi")
-
-if(WIN32)
-    set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/pact_ffi.dll")
-elseif(APPLE)
-    set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/libpact_ffi.dylib")
-else()
-    set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/libpact_ffi.so")
-endif()
 
 
 # 创建 imported target

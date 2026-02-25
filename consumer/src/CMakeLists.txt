@@ -23,9 +23,7 @@ target_link_libraries(pact-cpp-consumer
     PUBLIC
         nlohmann_json::nlohmann_json
         cpprestsdk::cpprest
-        # ✅ pact_ffi 不在这里链接
-        # 静态库(.a)链接动态库(.so)没有意义
-        # 由最终可执行文件 test/CMakeLists.txt 显式链接
+        pact_ffi                    # ✅ 加这一行：链接 pact_ffi
 )
 
 # ✅ 但头文件路径需要传递出去
