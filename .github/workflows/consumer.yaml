@@ -36,7 +36,7 @@ jobs:
           conan remote add pact-foundation https://pactfoundation.jfrog.io/artifactory/api/conan/pactfoundation-conan --force
           conan install ../conanfile.txt --build=missing \
             --settings compiler.cppstd=17 \
-            --require-override="boost/1.72.0"
+            --require="boost/1.72.0"
         working-directory: consumer/build
         env:
           CC: gcc-14
@@ -81,7 +81,7 @@ jobs:
         run: |
           conan remote add pact-foundation https://pactfoundation.jfrog.io/artifactory/api/conan/pactfoundation-conan --force
           conan install ../conanfile.txt --build=missing --settings compiler.cppstd=17 \
-            --require-override="boost/1.72.0"
+            --require="boost/1.72.0"
         working-directory: consumer/build
         shell: bash
 
@@ -126,7 +126,7 @@ jobs:
           conan profile detect --force
           conan remote add pact-foundation https://pactfoundation.jfrog.io/artifactory/api/conan/pactfoundation-conan --force
           conan install ../conanfile.txt --build=missing --settings compiler.cppstd=17 \
-            --require-override="boost/1.72.0"
+            --require="boost/1.72.0"
         working-directory: consumer/build
 
       - name: Build library
