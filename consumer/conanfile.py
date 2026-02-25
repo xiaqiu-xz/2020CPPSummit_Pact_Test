@@ -1,6 +1,4 @@
 from conans import ConanFile, CMake
-
-
 class PactcppconsumerConan(ConanFile):
     name = "pact_cpp_consumer"
     version = "0.1.1"
@@ -13,19 +11,17 @@ class PactcppconsumerConan(ConanFile):
     default_options = {"shared": False}
     generators = "cmake"
     exports_sources = "src/*", "include/*"
-    requires = "pact_ffi/0.0.0@pact/beta", "nlohmann_json/3.7.3", "gtest/1.10.0", "cpprestsdk/2.10.15"
+    requires = "pact_ffi/0.5.3", "nlohmann_json/3.11.3", "gtest/1.17.0.0", "cpprestsdk/2.10.18"
     scm = {
         "type": "git",
         "subfolder": "src",
         "url": "auto",
         "revision": "auto"
      }
-
     def build(self):
         cmake = CMake(self)
         cmake.configure(source_folder="src")
         cmake.build()
-
     def package(self):
         self.copy("*.h", dst="include", src="include")
         self.copy("*.lib", dst="lib", keep_path=False)
@@ -33,6 +29,5 @@ class PactcppconsumerConan(ConanFile):
         self.copy("*.dylib*", dst="lib", keep_path=False)
         self.copy("*.so", dst="lib", keep_path=False)
         self.copy("*.a", dst="lib", keep_path=False)
-
     def package_info(self):
         self.cpp_info.libs = ["pact-cpp-consumer"]
