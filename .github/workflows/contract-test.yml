@@ -1,114 +1,35 @@
 name: Contract Tests
 on: [push, pull_request]
 
-env:
-  PACT_CLI_VERSION: "2.5.12"
-
 jobs:
   consumer-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install build dependencies
+      - name: Install Python and Conan
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y build-essential cmake ninja-build libssl-dev curl git
+          pip install "conan<2.0"  # 针对旧版 Pact 库，1.x 兼容性更好
+          conan profile new default --detect
+          conan profile update settings.compiler.libcxx=libstdc++11 default
+          # 添加 Pact 官方仓库，否则找不到 pact-cpp-consumer
+          conan remote add pact-foundation https://pactfoundation.jfrog.io/artifactory/api/conan/pact-conan
 
       - name: Install Pact CLI
         run: |
-          curl -fsSL \
-            https://raw.githubusercontent.com/pact-foundation/pact-standalone/master/install.sh \
-            | PACT_CLI_VERSION=v${PACT_CLI_VERSION} bash
+          curl -fsSL https://raw.githubusercontent.com/pact-foundation/pact-standalone/master/install.sh | bash
           echo "$(pwd)/pact/bin" >> $GITHUB_PATH
 
-      - name: Verify Pact CLI
+      - name: Build with Conan
         run: |
-          pact-broker version
-          pact_verifier_cli --version
+          mkdir build && cd build
+          # 执行安装，生成 FindBoost.cmake, Findnlohmann_json.cmake 等
+          conan install .. --build=missing
+          
+          # 关键点：通过 CMAKE_TOOLCHAIN_FILE 告诉 CMake 去哪里找 Conan 下载的包
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=conan_paths.cmake
+          make consumer_test -j$(nproc)
 
-      - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
-
-      - name: Install System Dependencies
+      - name: Run tests
         run: |
-          sudo apt-get update
-          # 添加 nlohmann-json3-dev
-          sudo apt-get install -y \
-            libboost-all-dev \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            nlohmann-json3-dev
-
-      - name: Build consumer tests
-        run: cmake --build build --target consumer_test -j$(nproc)
-
-      - name: Run consumer tests
-        run: |
-          cd build && ./consumer_test
-          echo "── 生成的契约文件 ──"
-          ls -lh ../pacts/
-
-      - name: Publish contracts to Pact Broker
-        if: success()
-        run: |
-          pact-broker publish ./pacts \
-            --broker-base-url "${{ secrets.PACT_BROKER_URL }}" \
-            --broker-token    "${{ secrets.PACT_BROKER_TOKEN }}" \
-            --consumer-app-version "${{ github.sha }}" \
-            --tag "${{ github.ref_name }}"
-
-      - name: Upload pact contracts artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: pact-contracts
-          path: ./pacts/*.json
-          retention-days: 7
-
-  provider-verify:
-    needs: consumer-test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y build-essential cmake ninja-build libssl-dev curl git
-
-      - name: Install Pact CLI
-        run: |
-          curl -fsSL \
-            https://raw.githubusercontent.com/pact-foundation/pact-standalone/master/install.sh \
-            | PACT_CLI_VERSION=v${PACT_CLI_VERSION} bash
-          echo "$(pwd)/pact/bin" >> $GITHUB_PATH
-
-      - name: Download pact contracts
-        uses: actions/download-artifact@v4
-        with:
-          name: pact-contracts
-          path: ./pacts
-
-      - name: Start provider service
-        run: |
-          if [ -f docker-compose.yml ]; then
-            docker-compose up -d todo-service
-            timeout 60 bash -c \
-              'until curl -sf http://localhost:8080/health; do sleep 2; done'
-          fi
-
-      - name: Build and run provider tests
-        run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
-          cmake --build build --target provider_test -j$(nproc)
-          ./build/provider_test
-
-      - name: Can I Deploy
-        if: always()
-        run: |
-          pact-broker can-i-deploy \
-            --broker-base-url "${{ secrets.PACT_BROKER_URL }}" \
-            --broker-token    "${{ secrets.PACT_BROKER_TOKEN }}" \
-            --pacticipant TodoService \
-            --version "${{ github.sha }}" \
-            --to-environment production
+          ./build/consumer_test

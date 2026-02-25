@@ -1,6 +1,6 @@
 // provider_test/provider_test.cpp
 // Provider 拉取契约文件，验证自己的实现是否满足所有期望
-#include <pact-cpp/provider.hpp>
+#include "provider.h"
 #include <gtest/gtest.h>
 // Provider State 处理器
 // 在验证每个 interaction 前，设置必要的数据库/内存状态
