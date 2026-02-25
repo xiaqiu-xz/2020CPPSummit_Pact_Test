@@ -51,7 +51,8 @@ jobs:
           rm -f ../conanfile.py || true
 
           # 强制构建 pact_ffi（Rust 源代码）
-          conan install ../conanfile.txt --build=missing --build=pact_ffi --settings compiler.cppstd=17 --generator=CMakeToolchain \
+          # --build=pact_ffi
+          conan install ../conanfile.txt --build=missing  --settings compiler.cppstd=17 --generator=CMakeToolchain \
             --generator=CMakeDeps
         working-directory: consumer/build
         env:
@@ -110,7 +111,7 @@ jobs:
         run: |
           # 删除 conanfile.py 避免 ambiguous
           rm -f ../conanfile.py || true
-          conan install ../conanfile.txt --build=missing --build=pact_ffi --settings compiler.cppstd=17 --generator=CMakeToolchain \
+          conan install ../conanfile.txt --build=missing  --settings compiler.cppstd=17 --generator=CMakeToolchain \
             --generator=CMakeDeps
         working-directory: consumer/build
         shell: bash
@@ -172,7 +173,7 @@ jobs:
           # 删除 conanfile.py 避免 ambiguous
           rm -f ../conanfile.py || true
 
-          conan install ../conanfile.txt --build=missing --build=pact_ffi --settings compiler.cppstd=17 --generator=CMakeToolchain \
+          conan install ../conanfile.txt --build=missing  --settings compiler.cppstd=17 --generator=CMakeToolchain \
             --generator=CMakeDeps
         working-directory: consumer/build
 
