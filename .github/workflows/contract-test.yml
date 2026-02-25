@@ -1,0 +1,39 @@
+name: Contract Tests
+on: [push, pull_request]
+jobs:
+  # ── 消费者端：生成契约 ──────────────────────────
+  consumer-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run consumer tests
+        run: |
+          mkdir build && cd build
+          conan install .. --build=missing
+          cmake .. && make consumer_test
+          ./consumer_test
+      - name: Publish contract to Pact Broker
+        run: |
+          pact-broker publish ./pacts \
+            --broker-base-url ${{ secrets.PACT_BROKER_URL }} \
+            --consumer-app-version ${{ github.sha }} \
+            --tag ${{ github.ref_name }}
+  # ── 提供者端：验证契约 ──────────────────────────
+  provider-verify:
+    needs: consumer-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start provider service
+        run: docker-compose up -d todo-service
+      - name: Run provider verification
+        run: |
+          mkdir build && cd build
+          cmake .. && make provider_test
+          ./provider_test
+      - name: Mark verification result in Broker
+        run: |
+          pact-broker can-i-deploy \
+            --broker-base-url ${{ secrets.PACT_BROKER_URL }} \
+            --pacticipant TodoService \
+            --version ${{ github.sha }}
