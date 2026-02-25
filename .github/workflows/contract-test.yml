@@ -1,51 +1,88 @@
 name: Contract Tests
 on: [push, pull_request]
+
 jobs:
   # ── 消费者端：生成契约 ──────────────────────────
   consumer-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # --- 新增步骤：安装 Python 和 Conan ---
+
       - name: Install Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
-          
-      - name: Install Conan
+          python-version: '3.10'
+
+      - name: Install Conan and Pact CLI
         run: |
-          pip install conan
-          # 初始化默认配置（Conan 2.x 必需）
-          conan profile detect --force
-      # ------------------------------------
+          # 安装 Conan 1.x (pact-cpp-consumer 较旧，1.x 兼容性更稳)
+          pip install "conan<2.0"
+          conan profile new default --detect
+          conan profile update settings.compiler.libcxx=libstdc++11 default
+          
+          # 添加 Pact 官方 Conan 仓库
+          conan remote add pact-foundation https://pactfoundation.jfrog.io/artifactory/api/conan/pact-conan
+          
+          # 下载并安装 Pact 命令行工具 (用于发布契约)
+          curl -LO https://github.com/pact-foundation/pact-ruby-cli/releases/latest/download/pact-linux-x86_64.tar.gz
+          tar -xzf pact-linux-x86_64.tar.gz
+          echo "$(pwd)/pact/bin" >> $GITHUB_PATH
+
       - name: Build and run consumer tests
         run: |
           mkdir build && cd build
+          # 使用 Conan 安装依赖
           conan install .. --build=missing
-          cmake .. && make consumer_test
+          # 使用 Conan 生成的变量构建
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          make consumer_test
+          # 运行测试生成 ./pacts/ 目录下的 JSON
           ./consumer_test
+
       - name: Publish contract to Pact Broker
+        if: success()
         run: |
           pact-broker publish ./pacts \
             --broker-base-url ${{ secrets.PACT_BROKER_URL }} \
+            --broker-token ${{ secrets.PACT_BROKER_TOKEN }} \
             --consumer-app-version ${{ github.sha }} \
             --tag ${{ github.ref_name }}
+
   # ── 提供者端：验证契约 ──────────────────────────
   provider-verify:
     needs: consumer-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Start provider service
-        run: docker-compose up -d todo-service
+        run: |
+          # 确保仓库中有 docker-compose.yml，或者在这里手动启动服务
+          if [ -f docker-compose.yml ]; then
+            docker-compose up -d todo-service
+          else
+            echo "Warning: docker-compose.yml not found, skipping service start"
+          fi
+
+      - name: Install Pact CLI (Provider side)
+        run: |
+          curl -LO https://github.com/pact-foundation/pact-ruby-cli/releases/latest/download/pact-linux-x86_64.tar.gz
+          tar -xzf pact-linux-x86_64.tar.gz
+          echo "$(pwd)/pact/bin" >> $GITHUB_PATH
+
       - name: Run provider verification
         run: |
+          # 提供者端通常需要下载契约进行验证
           mkdir build && cd build
-          cmake .. && make provider_test
+          cmake ..
+          make provider_test
           ./provider_test
+
       - name: Mark verification result in Broker
+        if: always()
         run: |
           pact-broker can-i-deploy \
             --broker-base-url ${{ secrets.PACT_BROKER_URL }} \
+            --broker-token ${{ secrets.PACT_BROKER_TOKEN }} \
             --pacticipant TodoService \
             --version ${{ github.sha }}
