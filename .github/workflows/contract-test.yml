@@ -1,13 +1,6 @@
 name: Contract Tests
 on: [push, pull_request]
 
-# ─────────────────────────────────────────────────────────
-# 说明：
-#   pact-ruby-cli      → 已废弃 ❌
-#   pact-ruby-standalone → 已迁移 ❌
-#   pact-standalone    → 当前维护的正确仓库 ✅  (v2.5.12)
-# ─────────────────────────────────────────────────────────
-
 env:
   PACT_CLI_VERSION: "2.5.12"
 
@@ -20,69 +13,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      # ── Conan 包管理器 ─────────────────────────────────
-      - name: Install Conan
+      # ── 系统依赖 ───────────────────────────────────────
+      - name: Install build dependencies
         run: |
-          pip install "conan<2.0"
-          conan profile new default --detect
-          conan profile update settings.compiler.libcxx=libstdc++11 default
-          conan remote add pact-foundation \
-            https://pactfoundation.jfrog.io/artifactory/api/conan/pact-conan \
-            || true   # 已存在时不报错
+          sudo apt-get update -q
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            libssl-dev curl git
 
-      # ── Pact CLI（官方推荐安装方式）────────────────────
+      # ── Pact CLI ───────────────────────────────────────
       - name: Install Pact CLI
         run: |
-          # 方式1：官方一键安装脚本（最简洁）
-          curl -fsSL https://raw.githubusercontent.com/pact-foundation/pact-standalone/master/install.sh \
+          curl -fsSL \
+            https://raw.githubusercontent.com/pact-foundation/pact-standalone/master/install.sh \
             | PACT_CLI_VERSION=v${PACT_CLI_VERSION} bash
-
-          # 写入 PATH
           echo "$(pwd)/pact/bin" >> $GITHUB_PATH
-
-      # 也可以用方式2（固定 URL 下载，与方式1 二选一）:
-      # - name: Install Pact CLI (manual download)
-      #   run: |
-      #     curl -LO "https://github.com/pact-foundation/pact-standalone/releases/download/v${PACT_CLI_VERSION}/pact-${PACT_CLI_VERSION}-linux-x86_64.tar.gz"
-      #     # 校验 sha256（来自 release 页面）
-      #     echo "ecd6ecfa91ca0a7fe2c4b2a22b3dfeee30643b60c12afeeaeccf321714cf6e9e  pact-${PACT_CLI_VERSION}-linux-x86_64.tar.gz" | sha256sum -c -
-      #     tar xzf pact-${PACT_CLI_VERSION}-linux-x86_64.tar.gz
-      #     echo "$(pwd)/pact/bin" >> $GITHUB_PATH
 
       - name: Verify Pact CLI
         run: |
-          pact-broker version
-          pact-mock-service version
+          pact-broker version        # Ruby 二进制: 子命令 version
+          pact_verifier_cli --version # Rust 二进制: --version
 
-          # Rust 二进制：flag 风格
-          pact_verifier_cli --version
-          pact_mock_server_cli --version
-          
-          # 查看所有可用命令
-          pact help
-      
-      # ── 构建消费者测试 ─────────────────────────────────
+      # ── CMake 构建（FetchContent 自动拉取所有依赖）─────
+      # 不需要 Conan！CMakeLists.txt 用 FetchContent 下载:
+      #   googletest / nlohmann_json / pact-cplusplus / libpact_ffi
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
+
       - name: Build consumer tests
-        run: |
-          mkdir -p build && cd build
-          conan install .. --build=missing
-          cmake .. -DCMAKE_BUILD_TYPE=Release
-          make consumer_test -j$(nproc)
+        run: cmake --build build --target consumer_test -j$(nproc)
 
       - name: Run consumer tests
         run: |
-          cd build
-          ./consumer_test
-          # 验证契约文件确实生成了
+          cd build && ./consumer_test
+          echo "── 生成的契约文件 ──"
           ls -lh ../pacts/
 
-      # ── 发布契约到 Pact Broker ─────────────────────────
-      - name: Publish contracts to Pact Broker
+      # ── 发布到 Pact Broker ─────────────────────────────
+      - name: Publish contracts
         if: success()
         run: |
           pact-broker publish ./pacts \
@@ -91,8 +59,7 @@ jobs:
             --consumer-app-version "${{ github.sha }}" \
             --tag "${{ github.ref_name }}"
 
-      # 上传契约文件作为 artifact（方便 provider job 直接使用，不依赖 Broker）
-      - name: Upload pact files as artifact
+      - name: Upload pact contracts artifact
         uses: actions/upload-artifact@v4
         with:
           name: pact-contracts
@@ -108,54 +75,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ── Pact CLI（同样使用官方脚本）───────────────────
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y build-essential cmake ninja-build libssl-dev curl git
+
       - name: Install Pact CLI
         run: |
-          curl -fsSL https://raw.githubusercontent.com/pact-foundation/pact-standalone/master/install.sh \
+          curl -fsSL \
+            https://raw.githubusercontent.com/pact-foundation/pact-standalone/master/install.sh \
             | PACT_CLI_VERSION=v${PACT_CLI_VERSION} bash
           echo "$(pwd)/pact/bin" >> $GITHUB_PATH
 
-      # 从 consumer-test job 下载契约文件（不依赖 Broker 也能验证）
       - name: Download pact contracts
         uses: actions/download-artifact@v4
         with:
           name: pact-contracts
           path: ./pacts
 
-      # ── 启动 Provider 服务 ────────────────────────────
       - name: Start provider service
         run: |
           if [ -f docker-compose.yml ]; then
             docker-compose up -d todo-service
-            echo "等待服务就绪..."
             timeout 60 bash -c \
-              'until curl -sf http://localhost:8080/health; do
-                echo "  服务未就绪，等待 2s..."; sleep 2
-              done'
-            echo "Provider 服务已启动 ✅"
-          else
-            echo "⚠️  未找到 docker-compose.yml，跳过服务启动"
+              'until curl -sf http://localhost:8080/health; do sleep 2; done'
           fi
 
-      # ── 构建并运行提供者验证测试 ──────────────────────
-      - name: Build provider tests
+      - name: Build and run provider tests
         run: |
-          pip install "conan<2.0"
-          conan profile new default --detect
-          conan profile update settings.compiler.libcxx=libstdc++11 default
-          mkdir -p build && cd build
-          conan install .. --build=missing
-          cmake .. -DCMAKE_BUILD_TYPE=Release
-          make provider_test -j$(nproc)
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
+          cmake --build build --target provider_test -j$(nproc)
+          ./build/provider_test
 
-      - name: Run provider verification
-        run: |
-          cd build
-          ./provider_test
-
-      # ── Can I Deploy 检查 ─────────────────────────────
-      # 查询 Pact Broker，确认该版本是否可以安全部署
-      - name: Can I Deploy check
+      - name: Can I Deploy
         if: always()
         run: |
           pact-broker can-i-deploy \
