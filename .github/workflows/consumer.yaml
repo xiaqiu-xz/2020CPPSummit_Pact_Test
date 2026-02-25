@@ -1,191 +1,166 @@
-name: Consumer Project
+name: Consumer
 
 on: [push]
 
 jobs:
+  # ─────────────────────────────────────────
   build-ubuntu:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      # - name: Install latest GCC (gcc-14)
-      #   run: |
-      #     sudo apt-get update
-      #     sudo apt-get install -y gcc-14 g++-14
 
       - run: cmake --version
       - run: python --version
 
       - run: mkdir -p consumer/build
 
+      # Conan 缓存
       - name: Cache Conan packages
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: ${{ runner.os }}-conan2-${{ hashFiles('consumer/conanfile.*') }}
+          key: ${{ runner.os }}-conan2-${{ hashFiles('consumer/conanfile.txt') }}
           restore-keys: ${{ runner.os }}-conan2-
 
-      - name: Install conan
+      # 安装 Conan v2
+      - name: Install Conan
         run: |
-          pip3 install wheel setuptools
+          pip3 install --upgrade pip
           pip3 install conan
-
-      - name: Install Rust (for pact_ffi source build)
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source "$HOME/.cargo/env"
-          rustc --version
-
-      - name: Check conan version
-        run: |
-          export PATH=$PATH:/home/runner/.local/bin
           conan --version
 
-      - name: conan install dependencies
+      # 安装 Rust（如果依赖需要从源码编译）
+      - name: Install Rust
         run: |
-          rm -rf $HOME/.conan2/data/pact_ffi || true
-          export PATH=$PATH:/home/runner/.local/bin
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      # ✅ Conan v2 正确用法
+      - name: Conan install dependencies
+        working-directory: consumer/build
+        run: |
           conan profile detect --force
+          conan install ../conanfile.txt \
+            --build=missing \
+            --settings compiler.cppstd=17 \
+            --output-folder=.
 
-          # 解决 ambiguous：删除或忽略 conanfile.py（它是 package recipe）
-          rm -f ../conanfile.py || true
-
-          # 强制构建 pact_ffi（Rust 源代码）
-          # --build=pact_ffi
-          # conan install ../conanfile.txt --build=missing  --settings compiler.cppstd=17 --generator=CMakeToolchain \
-          #   --generator=CMakeDeps
+      # ✅ CMake 必须传入 conan_toolchain.cmake
+      - name: Build
         working-directory: consumer/build
-        env:
-          CC: gcc-14
-          CXX: g++-14
-
-      - name: Build library
         run: |
-          cmake .. -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake \
+            -DCMAKE_BUILD_TYPE=Release
           cmake --build .
-          cp ../test/example.jpg . || true
-        working-directory: consumer/build
-        env:
-          CC: gcc-14
-          CXX: g++-14
 
-      - name: Run pact-consumer-tests
-        run: test/bin/pact-consumer-tests || true
+      - name: Run tests
         working-directory: consumer/build
         env:
           LOG_LEVEL: DEBUG
+        run: test/bin/pact-consumer-tests || true
 
-  # Windows job（类似处理）
+  # ─────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
       - run: cmake --version
       - run: python --version
-
-      - run: mkdir consumer\build
-        shell: bash
+      - run: mkdir -p consumer/build
 
       - name: Cache Conan packages
         uses: actions/cache@v4
         with:
           path: ~\.conan2
-          key: ${{ runner.os }}-conan2-${{ hashFiles('consumer/conanfile.*') }}
+          key: ${{ runner.os }}-conan2-${{ hashFiles('consumer/conanfile.txt') }}
           restore-keys: ${{ runner.os }}-conan2-
 
-      - name: Install conan
+      - name: Install Conan
         run: |
-          pip3 install wheel setuptools
+          pip3 install --upgrade pip
           pip3 install conan
+          conan --version
 
-      - name: Install Rust (for pact_ffi source build)
+      - name: Install Rust
         run: |
           curl -sSf -o rustup-init.exe https://win.rustup.rs/x86_64
-          rustup-init.exe -y --default-toolchain stable --profile minimal
-          echo "$HOME\.cargo\bin" >> $GITHUB_PATH
-          rustc --version
-        shell: bash
+          ./rustup-init.exe -y --default-toolchain stable --profile minimal
+          echo "$USERPROFILE/.cargo/bin" >> $GITHUB_PATH
 
-      - name: conan install dependencies Windows
-        run: |
-          # 删除 conanfile.py 避免 ambiguous
-          rm -f ../conanfile.py || true
-          conan install ../conanfile.txt --build=missing  --settings compiler.cppstd=17 --generator=CMakeToolchain \
-            --generator=CMakeDeps
+      - name: Conan install dependencies
         working-directory: consumer/build
-        shell: bash
-
-      - name: Build library Windows
         run: |
-          cmake ..
+          conan profile detect --force
+          conan install ../conanfile.txt \
+            --build=missing \
+            --settings compiler.cppstd=17 \
+            --output-folder=.
+
+      - name: Build
+        working-directory: consumer/build
+        run: |
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake
           cmake --build . --config Release
-          cp ../test/example.jpg . || true
-        shell: bash
-        working-directory: consumer/build
 
-      - name: Run pact-consumer-tests
-        run: test/bin/pact-consumer-tests || true
+      - name: Run tests
         working-directory: consumer/build
         env:
           LOG_LEVEL: DEBUG
+        run: test/bin/pact-consumer-tests || true
 
-  # macOS job（类似）
+  # ─────────────────────────────────────────
   build-osx:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
       - run: cmake --version
-      - run: python --version
-
+      - run: python3 --version
       - run: mkdir -p consumer/build
 
       - name: Cache Conan packages
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: ${{ runner.os }}-conan2-${{ hashFiles('consumer/conanfile.*') }}
+          key: ${{ runner.os }}-conan2-${{ hashFiles('consumer/conanfile.txt') }}
           restore-keys: ${{ runner.os }}-conan2-
 
-      - name: Install conan
+      - name: Install Conan
         run: |
-          pip3 install wheel setuptools
+          pip3 install --upgrade pip
           pip3 install conan
-
-      - name: Install Rust (for pact_ffi source build)
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source "$HOME/.cargo/env"
-          rustc --version
-
-      - name: Check conan version
-        run: |
-          export PATH=$PATH:/Users/runner/.local/bin
           conan --version
 
-      - name: conan install dependencies
+      - name: Install Rust
         run: |
-          rm -rf $HOME/.conan2/data/pact_ffi || true
-          export PATH=$PATH:/Users/runner/.local/bin
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Conan install dependencies
+        working-directory: consumer/build
+        run: |
           conan profile detect --force
+          conan install ../conanfile.txt \
+            --build=missing \
+            --settings compiler.cppstd=17 \
+            --output-folder=.
 
-          # 删除 conanfile.py 避免 ambiguous
-          rm -f ../conanfile.py || true
-
-          conan install ../conanfile.txt --build=missing  --settings compiler.cppstd=17 --generator=CMakeToolchain \
-            --generator=CMakeDeps
+      - name: Build
         working-directory: consumer/build
-
-      - name: Build library
         run: |
-          cmake ..
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake \
+            -DCMAKE_BUILD_TYPE=Release
           cmake --build .
-          cp ../test/example.jpg . || true
-        working-directory: consumer/build
 
-      - name: Run pact-consumer-tests
-        run: test/bin/pact-consumer-tests || true
+      - name: Run tests
         working-directory: consumer/build
         env:
           LOG_LEVEL: DEBUG
+        run: test/bin/pact-consumer-tests || true
