@@ -52,8 +52,8 @@ jobs:
 
           # 强制构建 pact_ffi（Rust 源代码）
           # --build=pact_ffi
-          conan install ../conanfile.txt --build=missing  --settings compiler.cppstd=17 --generator=CMakeToolchain \
-            --generator=CMakeDeps
+          # conan install ../conanfile.txt --build=missing  --settings compiler.cppstd=17 --generator=CMakeToolchain \
+          #   --generator=CMakeDeps
         working-directory: consumer/build
         env:
           CC: gcc-14
