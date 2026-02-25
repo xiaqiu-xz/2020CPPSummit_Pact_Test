@@ -57,8 +57,15 @@ jobs:
       - name: Verify Pact CLI
         run: |
           pact-broker --version
-          pact_verifier_cli --version
+          pact-mock-service version
 
+          # Rust 二进制：flag 风格
+          pact_verifier_cli --version
+          pact_mock_server_cli --version
+          
+          # 查看所有可用命令
+          pact help
+      
       # ── 构建消费者测试 ─────────────────────────────────
       - name: Build consumer tests
         run: |
