@@ -13,21 +13,47 @@ find_package(cpprestsdk REQUIRED)
 # ① 先下载 pact_ffi（必须在 add_subdirectory 之前！）
 # ════════════════════════════════════════════════════════
 # set(PACT_FFI_VERSION "0.4.22")
-set(PACT_FFI_VERSION "0.3.15")
+# set(PACT_FFI_DIR "${CMAKE_BINARY_DIR}/pact_ffi")
+# file(MAKE_DIRECTORY "${PACT_FFI_DIR}")
+
+# if(WIN32)
+#     set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/pact_ffi.dll")
+#     set(PACT_FFI_URL "https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v${PACT_FFI_VERSION}/pact_ffi-windows-x86_64.dll.gz")
+# elseif(APPLE)
+#     set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/libpact_ffi.dylib")
+#     # 注意：Apple Silicon 用 aarch64，x86_64 Runner 用下面这个
+#     set(PACT_FFI_URL "https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v${PACT_FFI_VERSION}/libpact_ffi-macos-x86_64.dylib.gz")
+# else()
+#     set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/libpact_ffi.so")
+#     set(PACT_FFI_URL "https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v${PACT_FFI_VERSION}/libpact_ffi-linux-x86_64.so.gz")
+# endif()
+
+# ════════════════════════════════════════════════════════
+# pact_ffi — 由 CI workflow 提前下载，这里只创建 imported target
+# ════════════════════════════════════════════════════════
 set(PACT_FFI_DIR "${CMAKE_BINARY_DIR}/pact_ffi")
-file(MAKE_DIRECTORY "${PACT_FFI_DIR}")
 
 if(WIN32)
     set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/pact_ffi.dll")
-    set(PACT_FFI_URL "https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v${PACT_FFI_VERSION}/pact_ffi-windows-x86_64.dll.gz")
 elseif(APPLE)
     set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/libpact_ffi.dylib")
-    # 注意：Apple Silicon 用 aarch64，x86_64 Runner 用下面这个
-    set(PACT_FFI_URL "https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v${PACT_FFI_VERSION}/libpact_ffi-macos-x86_64.dylib.gz")
 else()
     set(PACT_FFI_LIB_FILE "${PACT_FFI_DIR}/libpact_ffi.so")
-    set(PACT_FFI_URL "https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v${PACT_FFI_VERSION}/libpact_ffi-linux-x86_64.so.gz")
 endif()
+
+if(NOT EXISTS "${PACT_FFI_LIB_FILE}")
+    message(FATAL_ERROR 
+        "找不到 pact_ffi 库: ${PACT_FFI_LIB_FILE}\n"
+        "请先运行 CI 下载步骤，或手动放置该文件。"
+    )
+endif()
+
+add_library(pact_ffi SHARED IMPORTED GLOBAL)
+set_target_properties(pact_ffi PROPERTIES
+    IMPORTED_LOCATION             "${PACT_FFI_LIB_FILE}"
+    INTERFACE_INCLUDE_DIRECTORIES "${PACT_FFI_DIR}"
+)
+
 # 下载并解压库文件
 if(NOT EXISTS "${PACT_FFI_LIB_FILE}")
     set(PACT_FFI_GZ "${PACT_FFI_DIR}/pact_ffi_download.gz")

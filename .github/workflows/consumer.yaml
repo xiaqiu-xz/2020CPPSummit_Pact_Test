@@ -45,6 +45,18 @@ jobs:
             --settings compiler.cppstd=17 \
             --output-folder=.
 
+      - name: Download pact_ffi (Linux)
+        run: |
+          mkdir -p consumer/build/pact_ffi
+          curl -sL \
+            https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v0.4.22/libpact_ffi-linux-x86_64.so.gz \
+            -o consumer/build/pact_ffi/libpact_ffi.so.gz
+          gunzip -f consumer/build/pact_ffi/libpact_ffi.so.gz
+          curl -sL \
+            https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v0.4.22/pact.h \
+            -o consumer/build/pact_ffi/pact.h
+          ls -la consumer/build/pact_ffi/
+
       # ✅ CMake 必须传入 conan_toolchain.cmake
       - name: Build
         working-directory: consumer/build
@@ -101,6 +113,26 @@ jobs:
             --settings compiler.cppstd=17 \
             --output-folder=.
 
+      - name: Download pact_ffi (Windows)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force consumer/build/pact_ffi
+          $base = "https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v0.4.22"
+          
+          # 下载并解压 dll
+          Invoke-WebRequest "$base/pact_ffi-windows-x86_64.dll.gz" -OutFile "consumer/build/pact_ffi/pact_ffi.dll.gz"
+          $in  = [System.IO.File]::OpenRead("consumer/build/pact_ffi/pact_ffi.dll.gz")
+          $out = [System.IO.File]::Create("consumer/build/pact_ffi/pact_ffi.dll")
+          $gz  = [System.IO.Compression.GZipStream]::new($in, [System.IO.Compression.CompressionMode]::Decompress)
+          $gz.CopyTo($out)
+          $gz.Close(); $out.Close(); $in.Close()
+          
+          # 下载头文件
+          Invoke-WebRequest "$base/pact.h" -OutFile "consumer/build/pact_ffi/pact.h"
+          
+          # 下载 .lib 导入库（链接时需要）
+          Invoke-WebRequest "$base/pact_ffi-windows-x86_64.dll.lib" -OutFile "consumer/build/pact_ffi/pact_ffi.lib"
+
       - name: Build
         working-directory: consumer/build
         run: |
@@ -153,6 +185,17 @@ jobs:
             --build=missing \
             --settings compiler.cppstd=17 \
             --output-folder=.
+
+      - name: Download pact_ffi (macOS)
+        run: |
+          mkdir -p consumer/build/pact_ffi
+          curl -sL \
+            https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v0.4.22/libpact_ffi-macos-x86_64.dylib.gz \
+            -o consumer/build/pact_ffi/libpact_ffi.dylib.gz
+          gunzip -f consumer/build/pact_ffi/libpact_ffi.dylib.gz
+          curl -sL \
+            https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v0.4.22/pact.h \
+            -o consumer/build/pact_ffi/pact.h
 
       - name: Build
         working-directory: consumer/build
