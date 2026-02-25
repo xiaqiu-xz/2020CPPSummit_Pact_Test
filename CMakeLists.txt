@@ -22,10 +22,12 @@ FetchContent_MakeAvailable(nlohmann_json)
 
 # ── 3. pact-cplusplus (C++ DSL for Pact) ─────────────────
 # 官方仓库：https://github.com/pact-foundation/pact-cplusplus
+# 修复：默认分支是 master 不是 main，用 release tag 锁定更稳定
 FetchContent_Declare(
   pact_cplusplus
   GIT_REPOSITORY https://github.com/pact-foundation/pact-cplusplus.git
-  GIT_TAG        main   # 或指定具体 commit hash 锁定版本
+  GIT_TAG        pact-cpp-consumer-v0.1.0   # 当前最新 release tag
+  GIT_SHALLOW    TRUE                        # 只拉最近一次 commit，加速下载
 )
 FetchContent_MakeAvailable(pact_cplusplus)
 
