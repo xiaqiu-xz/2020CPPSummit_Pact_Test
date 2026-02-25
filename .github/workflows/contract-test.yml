@@ -30,6 +30,12 @@ jobs:
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
 
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          # 安装 Boost 开发库、libcurl 和 OpenSSL（Pact C++ 运行所需）
+          sudo apt-get install -y libboost-all-dev libcurl4-openssl-dev libssl-dev
+
       - name: Build consumer tests
         run: cmake --build build --target consumer_test -j$(nproc)
 
