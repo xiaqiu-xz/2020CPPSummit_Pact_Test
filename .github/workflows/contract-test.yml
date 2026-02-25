@@ -5,23 +5,16 @@ env:
   PACT_CLI_VERSION: "2.5.12"
 
 jobs:
-  # ══════════════════════════════════════════════════════
-  # 消费者端：生成契约
-  # ══════════════════════════════════════════════════════
   consumer-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # ── 系统依赖 ───────────────────────────────────────
       - name: Install build dependencies
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y \
-            build-essential cmake ninja-build \
-            libssl-dev curl git
+          sudo apt-get install -y build-essential cmake ninja-build libssl-dev curl git
 
-      # ── Pact CLI ───────────────────────────────────────
       - name: Install Pact CLI
         run: |
           curl -fsSL \
@@ -31,13 +24,32 @@ jobs:
 
       - name: Verify Pact CLI
         run: |
-          pact-broker version        # Ruby 二进制: 子命令 version
-          pact_verifier_cli --version # Rust 二进制: --version
+          pact-broker version
+          pact_verifier_cli --version
 
-      # ── CMake 构建（FetchContent 自动拉取所有依赖）─────
-      # 不需要 Conan！CMakeLists.txt 用 FetchContent 下载:
-      #   googletest / nlohmann_json / pact-cplusplus / libpact_ffi
-      - name: Configure
+      # Step 1: 只做 FetchContent 下载，不编译，先看清楚目录结构
+      - name: Fetch dependencies only (for inspection)
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja \
+            -DFETCH_ONLY=ON 2>&1 | grep -E "(pact_cplusplus|HEADER|SOURCE)" || true
+
+      - name: "DEBUG: Show real pact-cplusplus directory structure"
+        run: |
+          PACT_SRC="build/_deps/pact_cplusplus-src"
+          echo "====== 完整目录树 ======"
+          find ${PACT_SRC} -type f | sort
+
+          echo ""
+          echo "====== 所有 .hpp 文件 ======"
+          find ${PACT_SRC} -name "*.hpp" | sort
+
+          echo ""
+          echo "====== consumer/ 子目录 ======"
+          ls -la ${PACT_SRC}/consumer/ 2>/dev/null || echo "consumer/ 不存在"
+          ls -la ${PACT_SRC}/consumer/include/ 2>/dev/null || echo "consumer/include/ 不存在"
+          ls -la ${PACT_SRC}/consumer/src/ 2>/dev/null || echo "consumer/src/ 不存在"
+
+      - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
 
       - name: Build consumer tests
@@ -46,10 +58,8 @@ jobs:
       - name: Run consumer tests
         run: |
           cd build && ./consumer_test
-          echo "── 生成的契约文件 ──"
           ls -lh ../pacts/
 
-      # ── 发布到 Pact Broker ─────────────────────────────
       - name: Publish contracts
         if: success()
         run: |
@@ -59,16 +69,13 @@ jobs:
             --consumer-app-version "${{ github.sha }}" \
             --tag "${{ github.ref_name }}"
 
-      - name: Upload pact contracts artifact
+      - name: Upload pact contracts
         uses: actions/upload-artifact@v4
         with:
           name: pact-contracts
           path: ./pacts/*.json
           retention-days: 7
 
-  # ══════════════════════════════════════════════════════
-  # 提供者端：验证契约
-  # ══════════════════════════════════════════════════════
   provider-verify:
     needs: consumer-test
     runs-on: ubuntu-latest
