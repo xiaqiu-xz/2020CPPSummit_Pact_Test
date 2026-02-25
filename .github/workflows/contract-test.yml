@@ -6,6 +6,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # --- 新增步骤：安装 Python 和 Conan ---
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          
+      - name: Install Conan
+        run: |
+          pip install conan
+          # 初始化默认配置（Conan 2.x 必需）
+          conan profile detect --force
+      # ------------------------------------
       - name: Build and run consumer tests
         run: |
           mkdir build && cd build
