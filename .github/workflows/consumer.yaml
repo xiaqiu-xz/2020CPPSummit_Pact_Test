@@ -22,12 +22,12 @@ jobs:
           conan --version
       - name: conan install dependencies
         run: |
-          rm -rf $HOME/.conan2/data/pact_ffi
+          rm -rf $HOME/.conan2/data/pact_ffi  # 注意：Conan 2 用 .conan2
           export PATH=$PATH:/home/runner/.local/bin
-          conan profile new default --detect
-          conan remote add pact-foundation https://pactfoundation.jfrog.io/artifactory/api/conan/pactfoundation-conan
-          conan profile update settings.compiler.libcxx=libstdc++11 default
-          conan install .. --build missing
+          conan profile detect --force   # 自动创建/覆盖 default profile
+          conan remote add pact-foundation https://pactfoundation.jfrog.io/artifactory/api/conan/pactfoundation-conan --force
+          # 如果需要特定 libcxx 或 cppstd，用 --settings 覆盖（无需 profile update）
+          conan install .. --build=missing --settings compiler.libcxx=libstdc++11 --settings compiler.cppstd=17
         working-directory: consumer/build
         env:
           CC: gcc-9
