@@ -1,9 +1,9 @@
 [requires]
-gtest/1.10.0
+gtest/1.15.2
 boost/1.83.0
-cpprestsdk/2.10.15
-pact_ffi/0.0.0@pact/beta
-nlohmann_json/3.7.3
+cpprestsdk/2.10.18
+pact_ffi/0.5.3
+nlohmann_json/3.11.3
 
 [generators]
 cmake
