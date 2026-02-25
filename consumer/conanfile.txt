@@ -2,7 +2,7 @@
 gtest/1.17.0
 boost/1.83.0
 cpprestsdk/2.10.18
-pact_ffi/0.5.3
+pact_ffi/0.5.1
 nlohmann_json/3.11.3
 
 [generators]
