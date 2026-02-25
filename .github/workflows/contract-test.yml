@@ -27,28 +27,6 @@ jobs:
           pact-broker version
           pact_verifier_cli --version
 
-      # Step 1: 只做 FetchContent 下载，不编译，先看清楚目录结构
-      - name: Fetch dependencies only (for inspection)
-        run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja \
-            -DFETCH_ONLY=ON 2>&1 | grep -E "(pact_cplusplus|HEADER|SOURCE)" || true
-
-      - name: "DEBUG: Show real pact-cplusplus directory structure"
-        run: |
-          PACT_SRC="build/_deps/pact_cplusplus-src"
-          echo "====== 完整目录树 ======"
-          find ${PACT_SRC} -type f | sort
-
-          echo ""
-          echo "====== 所有 .hpp 文件 ======"
-          find ${PACT_SRC} -name "*.hpp" | sort
-
-          echo ""
-          echo "====== consumer/ 子目录 ======"
-          ls -la ${PACT_SRC}/consumer/ 2>/dev/null || echo "consumer/ 不存在"
-          ls -la ${PACT_SRC}/consumer/include/ 2>/dev/null || echo "consumer/include/ 不存在"
-          ls -la ${PACT_SRC}/consumer/src/ 2>/dev/null || echo "consumer/src/ 不存在"
-
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
 
@@ -58,9 +36,10 @@ jobs:
       - name: Run consumer tests
         run: |
           cd build && ./consumer_test
+          echo "── 生成的契约文件 ──"
           ls -lh ../pacts/
 
-      - name: Publish contracts
+      - name: Publish contracts to Pact Broker
         if: success()
         run: |
           pact-broker publish ./pacts \
@@ -69,7 +48,7 @@ jobs:
             --consumer-app-version "${{ github.sha }}" \
             --tag "${{ github.ref_name }}"
 
-      - name: Upload pact contracts
+      - name: Upload pact contracts artifact
         uses: actions/upload-artifact@v4
         with:
           name: pact-contracts
