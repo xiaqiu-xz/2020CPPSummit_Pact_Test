@@ -1,7 +1,20 @@
 name: Contract Tests
 on: [push, pull_request]
 
+# ─────────────────────────────────────────────────────────
+# 说明：
+#   pact-ruby-cli      → 已废弃 ❌
+#   pact-ruby-standalone → 已迁移 ❌
+#   pact-standalone    → 当前维护的正确仓库 ✅  (v2.5.12)
+# ─────────────────────────────────────────────────────────
+
+env:
+  PACT_CLI_VERSION: "2.5.12"
+
 jobs:
+  # ══════════════════════════════════════════════════════
+  # 消费者端：生成契约
+  # ══════════════════════════════════════════════════════
   consumer-test:
     runs-on: ubuntu-latest
     steps:
@@ -12,86 +25,135 @@ jobs:
         with:
           python-version: '3.10'
 
+      # ── Conan 包管理器 ─────────────────────────────────
       - name: Install Conan
         run: |
           pip install "conan<2.0"
           conan profile new default --detect
           conan profile update settings.compiler.libcxx=libstdc++11 default
           conan remote add pact-foundation \
-            https://pactfoundation.jfrog.io/artifactory/api/conan/pact-conan
+            https://pactfoundation.jfrog.io/artifactory/api/conan/pact-conan \
+            || true   # 已存在时不报错
 
-      # ✅ 修复：改用 pact-ruby-standalone，文件名和路径都正确
+      # ── Pact CLI（官方推荐安装方式）────────────────────
       - name: Install Pact CLI
         run: |
-          PACT_VERSION="2.4.28"
-          curl -L \
-            "https://github.com/pact-foundation/pact-ruby-standalone/releases/download/v${PACT_VERSION}/pact-${PACT_VERSION}-linux-x86_64.tar.gz" \
-            -o pact.tar.gz
+          # 方式1：官方一键安装脚本（最简洁）
+          curl -fsSL https://raw.githubusercontent.com/pact-foundation/pact-standalone/master/install.sh \
+            | PACT_CLI_VERSION=v${PACT_CLI_VERSION} bash
 
-          # 验证下载大小（应该有几十 MB，不是 9 字节）
-          ls -lh pact.tar.gz
-
-          tar -xzf pact.tar.gz
+          # 写入 PATH
           echo "$(pwd)/pact/bin" >> $GITHUB_PATH
 
-      - name: Verify Pact CLI installed
-        run: pact-broker --version
+      # 也可以用方式2（固定 URL 下载，与方式1 二选一）:
+      # - name: Install Pact CLI (manual download)
+      #   run: |
+      #     curl -LO "https://github.com/pact-foundation/pact-standalone/releases/download/v${PACT_CLI_VERSION}/pact-${PACT_CLI_VERSION}-linux-x86_64.tar.gz"
+      #     # 校验 sha256（来自 release 页面）
+      #     echo "ecd6ecfa91ca0a7fe2c4b2a22b3dfeee30643b60c12afeeaeccf321714cf6e9e  pact-${PACT_CLI_VERSION}-linux-x86_64.tar.gz" | sha256sum -c -
+      #     tar xzf pact-${PACT_CLI_VERSION}-linux-x86_64.tar.gz
+      #     echo "$(pwd)/pact/bin" >> $GITHUB_PATH
 
+      - name: Verify Pact CLI
+        run: |
+          pact-broker --version
+          pact_verifier_cli --version
+
+      # ── 构建消费者测试 ─────────────────────────────────
       - name: Build consumer tests
         run: |
-          mkdir build && cd build
+          mkdir -p build && cd build
           conan install .. --build=missing
           cmake .. -DCMAKE_BUILD_TYPE=Release
-          make consumer_test
+          make consumer_test -j$(nproc)
 
       - name: Run consumer tests
-        run: ./build/consumer_test
+        run: |
+          cd build
+          ./consumer_test
+          # 验证契约文件确实生成了
+          ls -lh ../pacts/
 
+      # ── 发布契约到 Pact Broker ─────────────────────────
       - name: Publish contracts to Pact Broker
         if: success()
         run: |
           pact-broker publish ./pacts \
             --broker-base-url "${{ secrets.PACT_BROKER_URL }}" \
-            --broker-token   "${{ secrets.PACT_BROKER_TOKEN }}" \
+            --broker-token    "${{ secrets.PACT_BROKER_TOKEN }}" \
             --consumer-app-version "${{ github.sha }}" \
             --tag "${{ github.ref_name }}"
 
+      # 上传契约文件作为 artifact（方便 provider job 直接使用，不依赖 Broker）
+      - name: Upload pact files as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pact-contracts
+          path: ./pacts/*.json
+          retention-days: 7
+
+  # ══════════════════════════════════════════════════════
+  # 提供者端：验证契约
+  # ══════════════════════════════════════════════════════
   provider-verify:
     needs: consumer-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      # ── Pact CLI（同样使用官方脚本）───────────────────
       - name: Install Pact CLI
         run: |
-          PACT_VERSION="2.4.28"
-          curl -L \
-            "https://github.com/pact-foundation/pact-ruby-standalone/releases/download/v${PACT_VERSION}/pact-${PACT_VERSION}-linux-x86_64.tar.gz" \
-            -o pact.tar.gz
-          tar -xzf pact.tar.gz
+          curl -fsSL https://raw.githubusercontent.com/pact-foundation/pact-standalone/master/install.sh \
+            | PACT_CLI_VERSION=v${PACT_CLI_VERSION} bash
           echo "$(pwd)/pact/bin" >> $GITHUB_PATH
 
+      # 从 consumer-test job 下载契约文件（不依赖 Broker 也能验证）
+      - name: Download pact contracts
+        uses: actions/download-artifact@v4
+        with:
+          name: pact-contracts
+          path: ./pacts
+
+      # ── 启动 Provider 服务 ────────────────────────────
       - name: Start provider service
         run: |
           if [ -f docker-compose.yml ]; then
             docker-compose up -d todo-service
-            # 等待服务健康
+            echo "等待服务就绪..."
             timeout 60 bash -c \
-              'until curl -sf http://localhost:8080/health; do sleep 2; done'
+              'until curl -sf http://localhost:8080/health; do
+                echo "  服务未就绪，等待 2s..."; sleep 2
+              done'
+            echo "Provider 服务已启动 ✅"
+          else
+            echo "⚠️  未找到 docker-compose.yml，跳过服务启动"
           fi
 
-      - name: Build and run provider verification
+      # ── 构建并运行提供者验证测试 ──────────────────────
+      - name: Build provider tests
         run: |
-          mkdir build && cd build
+          pip install "conan<2.0"
+          conan profile new default --detect
+          conan profile update settings.compiler.libcxx=libstdc++11 default
+          mkdir -p build && cd build
+          conan install .. --build=missing
           cmake .. -DCMAKE_BUILD_TYPE=Release
-          make provider_test
+          make provider_test -j$(nproc)
+
+      - name: Run provider verification
+        run: |
+          cd build
           ./provider_test
 
+      # ── Can I Deploy 检查 ─────────────────────────────
+      # 查询 Pact Broker，确认该版本是否可以安全部署
       - name: Can I Deploy check
         if: always()
         run: |
           pact-broker can-i-deploy \
             --broker-base-url "${{ secrets.PACT_BROKER_URL }}" \
-            --broker-token   "${{ secrets.PACT_BROKER_TOKEN }}" \
+            --broker-token    "${{ secrets.PACT_BROKER_TOKEN }}" \
             --pacticipant TodoService \
-            --version "${{ github.sha }}"
+            --version "${{ github.sha }}" \
+            --to-environment production
