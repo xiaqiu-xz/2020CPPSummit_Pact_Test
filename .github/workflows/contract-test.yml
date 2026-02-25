@@ -56,7 +56,7 @@ jobs:
 
       - name: Verify Pact CLI
         run: |
-          pact-broker --version
+          pact-broker version
           pact-mock-service version
 
           # Rust 二进制：flag 风格
