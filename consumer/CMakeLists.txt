@@ -90,20 +90,20 @@ find_package(cpprestsdk REQUIRED)
 
 #     message(STATUS "libpact_ffi 就绪: ${PACT_FFI_LIB_FILE}")
 # endif()
-# # 下载 pact.h 头文件
-# set(PACT_H "${PACT_FFI_DIR}/pact.h")
-# if(NOT EXISTS "${PACT_H}")
-#     message(STATUS "Downloading pact.h...")
-#     file(DOWNLOAD
-#         "https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v${PACT_FFI_VERSION}/pact.h"
-#         "${PACT_H}"
-#         STATUS DL_STATUS
-#     )
-#     list(GET DL_STATUS 0 DL_CODE)
-#     if(NOT DL_CODE EQUAL 0)
-#         message(FATAL_ERROR "下载 pact.h 失败: ${DL_STATUS}")
-#     endif()
-# endif()
+# 下载 pact.h 头文件
+set(PACT_H "${PACT_FFI_DIR}/pact.h")
+if(NOT EXISTS "${PACT_H}")
+    message(STATUS "Downloading pact.h...")
+    file(DOWNLOAD
+        "https://github.com/pact-foundation/pact-reference/releases/download/libpact_ffi-v${PACT_FFI_VERSION}/pact.h"
+        "${PACT_H}"
+        STATUS DL_STATUS
+    )
+    list(GET DL_STATUS 0 DL_CODE)
+    if(NOT DL_CODE EQUAL 0)
+        message(FATAL_ERROR "下载 pact.h 失败: ${DL_STATUS}")
+    endif()
+endif()
 
 
 # ════════════════════════════════════════════════════════
