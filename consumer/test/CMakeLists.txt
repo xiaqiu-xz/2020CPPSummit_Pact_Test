@@ -26,20 +26,20 @@ set_target_properties(pact-consumer-tests PROPERTIES
 
 if(WIN32)
     target_link_libraries(pact-consumer-tests PRIVATE
+        pact-cpp-consumer
+        pact_ffi                          # ← pact ffi
         GTest::gtest GTest::gtest_main
         nlohmann_json::nlohmann_json
         cpprestsdk::cpprest
-        pact-cpp-consumer
-        pact_ffi                          # ← pact ffi
         ws2_32 userenv crypt32 secur32 dnsapi ncrypt ntdll
     )
 elseif(UNIX)
     target_link_libraries(pact-consumer-tests PRIVATE
+        pact-cpp-consumer
+        pact_ffi                          # ← pact ffi
         GTest::gtest GTest::gtest_main
         nlohmann_json::nlohmann_json
         cpprestsdk::cpprest
-        pact-cpp-consumer
-        pact_ffi                          # ← pact ffi
     )
 endif()
 
